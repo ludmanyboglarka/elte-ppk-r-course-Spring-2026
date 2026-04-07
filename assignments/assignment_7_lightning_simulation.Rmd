@@ -1,9 +1,11 @@
 ---
 title: "Assignment 7: Lightning simulation"
-author: "Tamas Nagy"
+author: "Boglarka Ludmany"
 output: html_document
+date: "r format(Sys.time(), '%B, %Y')"
 editor_options: 
   chunk_output_type: console
+  ##rmd metadata: look into it
 ---
 
 ```{r setup, include=FALSE}
@@ -31,7 +33,131 @@ There is no dataset for this project. You have to simulate from scratch!
 
 ![Lightning](assignment_7_example/example_lightning.png)
 
+## Loading libraries
 ```{r}
+library(purrr)
+library(magrittr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+```
 
+
+## Creating the function, that makes the random walk possible 
+This random walk function creates the main branch of the random walk. Here, the random walk should have a strong direction downwards (y dimension), so that it is biased in y direction. This is defined by the mu_y parameter, which is the drift parameter for y (the expexted displacement per step). Here, it determines the vertical drift, which is supposed to be downwards (the lightning moves downwards).
+In the x dimension, the random walk should have small side-by-side movements, but here, since mu_x is close to 0, and not used, the random walk has no preferred direction, the movement is rather random. 
+The random walk starts from the x0 and y0 points, and each following point is determined by the mu_x, mu_y, and the z_x and z_y parameters. The number of steps in the random walk is represented by N. Each step is an independent draw from a normal distribution, and then the cumulative sum of these draws is created by `cumsum()`. In the z_y and z_x parameters, with the `cumsum()` function, the steps are added together, creating the position for each step, so that in each point in time, the sum of the steps define "where" that point is. 
+The variance parameters determine the variance of each step. `variance_x` determines the horizontal "zig-zag" of the random walk, and `variance_y` determines the amount of noise in the vertical movement of the random walk. `variance_x` should be greater than `variance_y`, because the vertical movement should be stable (downwards), but the horizontal movement can have noise (even if a small amount). 
+
+
+the parameters of the Gaussian random walk: 
+- mean (μ) which determines in which direction (left/right) the random walk is actually going: 
+  - if μ = 0 - there is no preferred direction
+  - if μ != 0 - there is a preferred direction
+- variance (σ): determines the expected displacement per step
+  - if σ is small -> the line is smoother, straighter
+  - if σ is bigger -> the line is cikázik
+here: the mean should be close to 0 on the x axis (no preferred direction), and bigger than 0 on the y axis (the y axis direction is downwards) 
+
+```{r}
+RW <- function(N, x0, mu_x, variance_x, y0, mu_y, variance_y) {
+  z_x <- cumsum(rnorm(n = N, mean = 0, sd = sqrt(variance_x))) ## the mean is 0: there is no preferred direction, the randomness is only defined by the variance_x 
+  z_y <- cumsum(rnorm(n = N, mean = mu_y, sd = sqrt(variance_y))) 
+  x <- x0 + z_x 
+  y <- y0 + z_y
+  data.frame(x = x, y = y) ## here, I specify that the preferred data type that this function should return is a data frame
+}
+```
+
+In order to make sure that the function worked correctly, I visualized a random walk with the `plot()` function. 
+```{r}
+P1 <- RW(N = 100, x0 = 0, mu_x = 0, variance_x = 0.001, y0 = 0, mu_y = 0.05, variance_y = 0.0005)
+
+main_branch_test <- plot(P1, type = "l", col = "red")
+```
+
+## Creating the main branch (with the RW() function)
+The parameters of the main_branch: 
+x0: starting position in the x dimension. Is 0, because: 
+mu_x: is 0, because: 
+variance_x: determines the expected displacement on the x axis. 
+y0: starting point in the y dimension. Is 0, because: 
+mu_y: is greater than mu_x because: .
+variance_y: is greater than variance_x, since the vertical movement is more stable than the horizontal movement (as mentioned before). 
+```{r}
+N_main <- 1500 ## number of steps in the main branch - N should be great enough
+
+main_branch <- RW(N = N_main, x0 = 0, mu_x = 0, variance_x = 0.00001, y0 = 0, mu_y = 0.035, variance_y = 0.00005) 
+```
+
+# ======================================================
+## Creating the fork points 
+```{r}
+## from here, code is not commented - and the markdown is still a work in progress
+main_branch_forks <- main_branch %>% 
+  mutate(random = sample(1:N_main, n(), replace = T), ## generate random number between 1 and 1000 for every step
+         fork = random < 10, 
+         t = row_number()) ## flag where random < 10 -> probability that random < 10 is 1% -> the step is a fork point 
+```
+
+```{r}
+## filtereltem hogy legyen egy df-em csak a fork pointokkal, majd ebbol csinaltam egy listat, hogy az lapply-t tudjam hasznalni a fork pointok random walkjanak elkeszitesehez 
+fork_points <- main_branch_forks %>% 
+  filter(fork != FALSE)
+fork_list <- split(fork_points, seq(nrow(fork_points)))
+
+## minden egyes fork pointhoz elkeszitettem a random walkot -> list of 5 fork points, mindegyikhez van egy data frame hozzarendelve a sajat random walkjaval
+
+forkpoint_rw <- lapply(
+  fork_list, 
+  function(row) {
+    N_fork <- N_main - row$t ## a main branch hatralevo lepeseinek a szama -> igy egy vonalban "fejezodik be" az osszes branch
+    if (N_fork < 10) return(NULL)
+    
+    direction <- sample(c(-1, 1), 1) * 0.00008 ## itt a sample veletlenszeruen kikop egy erteket a {-1, 1} halmazbol, es ezt megszorozzuk 0.00002vel, tehat a direction vagy -0.000002 vagy 0.000002 --> tehat a mu nem pontosan 0 lesz, hanem egy picit vagy kisebb, vagy nagyobb mint 0 -> a fork agak "kulonvalnak a main branchtol"
+    RW(N = N_fork, 
+       x0 = row$x, mu_x = direction, 
+       variance_x = 0.00003, ## nagyobb mint a main branche -> ne legyen cikazas  
+       y0 = row$y, mu_y = 0.035, variance_y = 0.000005)
+      } 
+)
+```
+
+```{r}
+## osszefuzni mindezt -> majd ebbol elkesziteni a vizualizaciot 
+fork_rw_df <- bind_rows(forkpoint_rw, .id = "branch")
+
+main_branch <- main_branch %>% 
+  mutate(branch = "0") ## itt ezt azert csinalom, hogy a branch id-ja 0 legyen a main branchnak -> igy meg lehessen kulonboztetni hogy melyik a main branch es melyik a fork branch
+
+final_rw <- bind_rows(main_branch, fork_rw_df)
+
+final_rw <- final_rw %>% 
+  group_by(branch) %>%
+  mutate(t = row_number() + ## itt ezzel az ifelse-vel csak azt hatarozom meg, hogy melyik branchen hogy szamitsa ki a t-t -> a branch indexek alapjan
+           if_else(branch == "0", 0, ## itt ha a branch 0, akkor az a main branch -> a main branch t-je csak folytatodik, nem csinal vele semmit 
+                   first(fork_points$t[as.integer(branch)]))) %>% ## ha a branch t-je nem 0, akkor: (a branch tipusa integer!), csak onnan folytatja a szamolast, ahol a branch id nem 0, tehat megszuletett egy fork ag - es a first azert kell, mert a fork_points$t[branch] vektornak az elso erteket kell felvennie - csak egy biztositek az errorok ellen, ha esetleg ez a vektor tobb erteket dobna ki 
+  ungroup()
+```
+
+```{r}
+library(gganimate)
+library(gifski)
+lightning_plot <- ggplot(final_rw, aes(x = x, y = y, group = branch)) +
+  geom_path(
+    color = "white", 
+    linewidth = 0.5 
+  ) +
+  scale_y_reverse() +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA), 
+    panel.background = element_rect(fill = "black", color = NA)
+  ) +
+  transition_reveal(t)
+
+animate(lightning_plot, renderer = gifski_renderer()) ## a renderer gifski, mert a magick rendererrel valamiert nem futott le az animacio
+
+# anim_save("lightning.gif", animation = last_animation())
 ```
 
