@@ -5,7 +5,7 @@ output: html_document
 date: "r format(Sys.time(), '%B, %Y')"
 editor_options: 
   chunk_output_type: console
-  ##rmd metadata: look into it
+  ## rmd metadata
 ---
 
 ```{r setup, include=FALSE}
