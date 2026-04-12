@@ -18,25 +18,68 @@ You will have to create 3 plots based on the datasets and instructions detailed 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-library(tidyverse)
-library(tidytuesdayR)
 ```
 
 ## Task 1: Climbing expeditions
 
-The 2020-09-22 TidyTueday datasets are about climbing expeditions. From the three datasets, use the "expeditions". Reproduce the plot below! Notice a few things:
+The 2020-09-22 TidyTuesday datasets are about climbing expeditions. From the three datasets, use the "expeditions". Reproduce the plot below! Notice a few things:
 
 -   Use `forcats::fct_lump()` to get the 15 most frequent peaks, and drop the "Other" category.
 -   The bars are ordered by the sum of all expeditions (use `fct_reorder()`).
 -   The bar colors use the viridis palette and light theme.
 
 ```{r}
-
+library(tidyverse)
+library(dplyr)
+library(tidytuesdayR)
+library(ggplot2)
 ```
 
+
+### Loading data
+```{r}
+tuesdata <- tidytuesdayR::tt_load('2020-09-22') 
+expeditions <- tuesdata$expeditions
+```
+
+### Aggregating the data
+- with the usage of `forcats::fct_lump` and `fct_reorder`
+```{r}
+library(forcats)
+expeditions_prep <- expeditions %>% 
+  select(
+    peak_name, season
+  ) %>% 
+  mutate(
+    peak_name = fct_lump(peak_name, n = 15)) %>% 
+  filter(peak_name != "Other") %>% 
+  mutate(
+    peak_name = fct_reorder(peak_name, peak_name, length)
+  )
+```
+
+### Creating the plot
+```{r}
+library(viridis)
+expeditions_plot <- ggplot(expeditions1, aes(y = peak_name)) +
+  geom_bar(aes(fill = season), position = position_stack()) +
+  scale_fill_viridis_d(option = "viridis") +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "The 15 most popular peaks stacked by season of expedition",
+    x = "Number of expeditions",
+    y = NULL
+  )
+
+expeditions_plot
+```
+
+
+## ======================================================
 ## Task 2: PhDs awarded
 
-The 2019-02-19 TidyTueday dataset is about phd-s awarded by year and field. There is only one dataset, it is called `phd_by_field`. Reproduce the plot below!
+The 2019-02-19 TidyTuesday dataset is about phd-s awarded by year and field. There is only one dataset, it is called `phd_by_field`. Reproduce the plot below!
 
 Notes:
 
@@ -44,13 +87,45 @@ Notes:
 -   To make the x axis breaks pretty, use `scales::pretty_breaks()`, to make the y axis labels comma formatted, use `scales::comma_format()`.
 -   The line size is 1.2, the colors are from the brewer "Dark2" palette. The theme is set to minimal.
 
+### Loading data
 ```{r}
-
+phd_by_field <- tidytuesdayR::tt_load('2019-02-19')
+phd_data <- phd_by_field$phd_by_field
 ```
 
+### Aggregating data
+```{r}
+phd_processed <- phd_data %>% 
+  select(
+    year, broad_field, n_phds
+  ) %>%
+  filter(!is.na(n_phds)) %>% 
+  group_by(year, broad_field) %>% 
+  summarise(n_phds = sum(n_phds), .groups = "drop")
+```
+
+
+### Creating the plot
+```{r}
+library(scales)
+phd_plot <- ggplot(phd_processed, aes(x = year, y = n_phds, colour = broad_field)) +
+  geom_line() +
+  labs(
+    title = "Number of awarded Ph.D.-s in the US by year",
+    x = NULL,
+    y = NULL
+  )
+
+phd_plot
+
+## TODO: linewidth, x axis (scales::pretty_breaks()), y axis (scales::comma_format()), colour palette
+```
+
+
+## ======================================================
 ## Task 3: Commute in the US
 
-The 2019-11-05 TidyTueday dataset is about commuting to work in each city in the US by bike or on foot. There is only one dataset, it is called `commute`. Reproduce the plot below!
+The 2019-11-05 TidyTuseday dataset is about commuting to work in each city in the US by bike or on foot. There is only one dataset, it is called `commute`. Reproduce the plot below!
 
 Notes:
 
@@ -59,5 +134,5 @@ Notes:
 -   The point size is 2, . The theme is set to light.
 
 ```{r}
-
+commute_us <- tidytuesdayR::tt_load('2019-11-05')
 ```
