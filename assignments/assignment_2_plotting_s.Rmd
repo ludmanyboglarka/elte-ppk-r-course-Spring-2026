@@ -135,6 +135,45 @@ Notes:
 -   Both axis scales are log transformed and the labels comma formatted, using `scales::comma_format()`
 -   The point size is 2, . The theme is set to light.
 
+## Importing data
 ```{r}
 commute_us <- tidytuesdayR::tt_load('2019-11-05')
+commute_data <- commute_us$commute
 ```
+
+## Aggregating data
+```{r}
+commute_processed <- commute_data %>% 
+  select(n, mode, state_abb, state_region) %>% 
+  filter(!is.na(n)) %>% 
+  group_by(state_abb, mode, state_region) %>% 
+  summarise(n = sum(n), .groups = "drop") %>% 
+  pivot_wider(
+    names_from = mode,
+    values_from = n
+  ) %>% 
+  filter(!(is.na(state_abb))) %>% 
+  rename(walk = Walk, 
+         bike = Bike)
+  
+```
+
+## Creating the plot 
+```{r}
+commute_plot <- ggplot(commute_processed, aes(x = walk, y = bike, colour = state_region)) +
+  geom_point(aes(colour = state_region)) +
+  labs(
+    title = "Title of people walking vs. biking to work in each USA state",
+    x = "Number of ppl walking to work (log N)",
+    y = "Number of ppl biking to work (log N)"
+  ) +
+  scale_y_log10(labels = comma_format()) +
+  scale_x_log10(labels = comma_format()) +
+  geom_text(aes(label = state_abb), colour = "black")
+  
+
+## TODO: geom_text labels -> too crowded
+
+commute_plot
+```
+
