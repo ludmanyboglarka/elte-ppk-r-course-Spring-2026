@@ -61,7 +61,7 @@ expeditions_prep <- expeditions %>%
 ### Creating the plot
 ```{r}
 library(viridis)
-expeditions_plot <- ggplot(expeditions1, aes(y = peak_name)) +
+expeditions_plot <- ggplot(expeditions_prep, aes(y = peak_name)) +
   geom_bar(aes(fill = season), position = position_stack()) +
   scale_fill_viridis_d(option = "viridis") +
   theme_light() +
@@ -109,16 +109,18 @@ phd_processed <- phd_data %>%
 ```{r}
 library(scales)
 phd_plot <- ggplot(phd_processed, aes(x = year, y = n_phds, colour = broad_field)) +
-  geom_line() +
+  geom_line(linewidth = 1.2) +
+  scale_color_brewer(palette = "Dark2", 
+                     name = "Broad field") +
   labs(
     title = "Number of awarded Ph.D.-s in the US by year",
     x = NULL,
     y = NULL
-  )
+  ) +
+  scale_x_continuous(breaks = pretty_breaks()) + ## x axis formatting
+  scale_y_continuous(labels = comma_format()) ## y axis formatting 
 
 phd_plot
-
-## TODO: linewidth, x axis (scales::pretty_breaks()), y axis (scales::comma_format()), colour palette
 ```
 
 
