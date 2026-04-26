@@ -14,7 +14,7 @@ You will have to create 3 plots based on the datasets and instructions detailed 
 -   Reporting using RMarkdown
 -   Using Git and Github (for submitting the task)
 -   Data manipulation (e.g. dplyr, tidyr), and working with factors (forcats)
--   Data visuzlization (ggplot2)
+-   Data visuazlization (ggplot2)
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
@@ -172,7 +172,7 @@ commute_plot <- ggplot(commute_processed, aes(x = walk, y = bike, colour = state
   geom_text(aes(label = state_abb), colour = "black")
   
 
-## TODO: geom_text labels -> too crowded
+## TODO: geom_text labels -> too crowded, also legend title
 
 commute_plot
 ```

@@ -57,18 +57,205 @@ Compare the model coefficients and the confidence intervals observed in this ass
 
 Read the datasets used in this assignment. Pay attention to the extensions of the datafiles.
 
+## Load libraries
 ```{r}
+if(!require("haven")) install.packages("haven") # package that is used when reading .sav datafiles
+library(haven)
+library(tidyr)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(lmerTest)
+library(lme4)
+```
 
+
+# ===================================================================================================
+# DATASET A - EXPLORATORY DATA ANALYSIS
+
+```{r}
+# Dataset A: 
+a_raw_data <- read_spss("Documents/2025_26_2/r-course-Spring-2026/data/assignment_4_dataset_A.sav")
 ```
 
 ## Exploratory data analysis
 
 Run an exploratory data analysis (EDA) to investigate the dataset.
 
+### 1. Data structure
+The first step was to investigate the structure of the dataset: this included the types and ranges of variables, and the potential presence of missing values.
+
+#### Data types
+```{r}
+str(a_raw_data) 
+```
+The variables are mostly numerical (pain, age, STAI_trait, pain_cat, cortisol_serum, cortisol_saliva, mindfulness, weight, IQ, household_income), while strings can also be found in the dataset (ID, sex, hospital). 
+
+#### Missing values
+```{r}
+colSums(is.na(a_raw_data))
+```
+No missing data was found within the variables. 
+
+#### Value ranges 
+```{r}
+summary(a_raw_data)
+```
+All the variables were in synch with the task description, the ranges were identical to the ones mentioned above. 
+
+### 2. Distributions
+#### 2.1. Distribution of postoperative pain scores (`pain`)
+```{r}
+ggplot(a_raw_data, aes(x = pain)) +
+  geom_histogram() +
+  labs(
+    title = "Distribution of prosperative pain scores"
+  )
+```
+The scores appeared to be approximately symmetrically dirstibuted. The distribution shows no strong skewness, and can be considered approximately normal.
+
+#### 2.2. Psychological predictors
+Next, the distributions of the following psychological variables were examined: 
+* `STAI_trait` (trait anxiety), 
+* `pain_cat` (pain catastrophizing), 
+* `mindfulness`.
+
+##### Trait anxiety - `STAI_trait`
+```{r}
+range(a_raw_data$STAI_trait)
+# Range is between 24 and 52. 
+# The variable measures anxiety on a scale of 20-80.
+
+ggplot(a_raw_data, aes(x = STAI_trait)) +
+  geom_histogram(binwidth = 1) +
+  scale_x_continuous(limits = c(20, 60)) +
+  labs(title = "Distribution of trait anxiety")
+
+# The theoretical maximum limit of the scale are not displayed on the axis. 
+```
+The distribution appears to have a slight right skew - indicating more observations at higher levels of anxiety. No extreme outliers were observed. The maximum observed value was 52, considerably below the theoretical upper bound of the scale (80). This suggests that very high levels of trait anxiety were not present in this sample. 
+
+##### Pain catastrophizing - `pain_cat`
+```{r}
+range(a_raw_data$pain_cat)
+# Range is between 17 and 42. Theoretical minimum on the scale is 0, the theoretical maximum is 52. 
+
+ggplot(a_raw_data, aes(x = pain_cat)) +
+  geom_histogram(binwidth = 1) +
+  scale_x_continuous(limits = c(0, 52)) +
+  labs(title = "Distribution of pain catastrophizing")
+
+# The x axis limits reflect the theoretical range of the pain catastrophizing scale. 
+```
+The distribution show that majority of the observations are concentrated between approximately 25 and 35, indicating an overally moderate level of catastrophizing.
+
+
+##### Mindfulness
+```{r}
+range(a_raw_data$mindfulness)
+# Range is between 1.00 and 5.58, which is in connection with the theoretical range of 1-6.
+
+ggplot(a_raw_data, aes(x = mindfulness)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.1, 
+                 fill = "#2f9147") +
+  geom_density() +
+  labs(title = "Distribution of dispositional mindfulness")
+```
+The distribution of dispositional mindfulness was visualized using a histogram. In order to show the shape of the distribution more smoothly, a density line was added to the histogram. 
+Most observations are concentrated between approximately 2.5 and 4, indicating mild levels of dispositional mindfulness in the sample. Considerably high values are relatively infrequent, no clear extreme outliers can be detected. 
+
+
+#### 2.3. Hormonal variables - cortisol
+The distributions of `cortisol_serum` and `cortisol_saliva` were also visualized  with a faceted histograms and density curves.
+
+```{r}
+cortisol_data <- a_raw_data %>% 
+  select(cortisol_serum, cortisol_saliva) %>% 
+  pivot_longer(cols = everything(), 
+               names_to = "type", 
+               values_to = "cortisol")
+```
+Here, the data was formatted in order to create the plot. 
+
+```{r}
+ggplot(cortisol_data, aes(x = cortisol)) +
+  geom_histogram(aes(y = after_stat(density)), 
+                 binwidth = 0.15, 
+                 fill = "#328da8") +
+  geom_density() +
+  facet_wrap(~ type) +
+  labs(title = "Distribution of cortisol levels")
+```
+The distributions show similar shape. However, the serum cortisol values seem to be centered at a slightly higher level, compared to salivary cortisol.
+
+#### 2.4. Demographic variables 
+Finally, the distributions of the following demographic variables were visualized: 
+* age,
+* sex,
+* and weight.
+
+```{r}
+age_sex_data <- a_raw_data %>% 
+  select(age, sex) %>% 
+  mutate(age = as.factor(age)) %>% 
+  mutate(sex = recode(sex, "Male" = "male"))
+
+age_pyramid(age_sex_data, age_group = age, split_by = sex) +
+      labs(x = "Age group", 
+          y = "Number of people", 
+          title = "Distribution of age within the genders")
+```
+The age distribution of participants was visualized separately for female and male participants. Ages ranged approximately from 28 to 51 years. The distributions for males and females appear to be similar, no clear systematic difference can be observed.
+
+Visualization of weight within males and females: 
+```{r}
+sex_weight_data <- a_raw_data %>% 
+  select(weight, sex) %>% 
+  mutate(sex = recode(sex, "Male" = "male"))
+
+ggplot(sex_weight_data, aes(x = sex, y = weight)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, 
+              alpha = 0.4)
+```
+
+### 3. Bivariate relationships - pain and predictors
+#### 3.1. Pain ~ STAI_trait 
+```{r}
+stai_pain_data <- a_raw_data %>%
+  group_by(pain) %>%
+  summarise(mean_STAI = mean(STAI_trait),
+            se = sd(STAI_trait)/sqrt(n())) 
+  ggplot(stai_pain_data, aes(x = pain, y = mean_STAI)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean_STAI - se,
+                    ymax = mean_STAI + se))
+```
++ interpretation
+
+#### 3.2. Pain ~ pain_cat 
 ```{r}
 
 ```
 
+
+#### 3.3. Pain ~ mindfulness 
+#### 3.4. Pain ~ cortisol_serum
+#### 3.5. Pain ~ cortisol_saliva 
+
+
+
+
+## Relationships among predictors
+
+## Do sites differ? - Clustering structure
+
+Before modeling, search answers for: 
+- should I transform (log)?
+- should i stardardize predictors? 
+
+## =============================================================
 ## Correct coding errors
 
 If you find values in the dataset during the EDA, that are not correct based on the provided descriptions of the variables of the dataset please correct them here.
