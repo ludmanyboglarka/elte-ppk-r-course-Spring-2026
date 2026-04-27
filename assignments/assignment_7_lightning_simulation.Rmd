@@ -4,8 +4,8 @@ author: "Boglarka Ludmany"
 output: html_document
 date: "r format(Sys.time(), '%B, %Y')"
 editor_options: 
-  chunk_output_type: console
   ## rmd metadata
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}

@@ -1,6 +1,6 @@
 ---
 title: "Assignment 5: Mixed models"
-author: "Marton Kovacs / Zoltan Kekecs"
+author: "Boglarka Ludmany"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -59,7 +59,9 @@ Read the datasets used in this assignment. Pay attention to the extensions of th
 
 ## Load libraries
 ```{r}
-if(!require("haven")) install.packages("haven") # package that is used when reading .sav datafiles
+library(broom.mixed)
+library(performance)
+library(corrplot)
 library(haven)
 library(tidyr)
 library(dplyr)
@@ -67,6 +69,7 @@ library(magrittr)
 library(ggplot2)
 library(lmerTest)
 library(lme4)
+library(apyramid)
 ```
 
 
@@ -75,7 +78,7 @@ library(lme4)
 
 ```{r}
 # Dataset A: 
-a_raw_data <- read_spss("Documents/2025_26_2/r-course-Spring-2026/data/assignment_4_dataset_A.sav")
+a_raw_data <- haven::read_spss("../data/assignment_4_dataset_A.sav")
 ```
 
 ## Exploratory data analysis
@@ -232,24 +235,105 @@ stai_pain_data <- a_raw_data %>%
   geom_errorbar(aes(ymin = mean_STAI - se,
                     ymax = mean_STAI + se))
 ```
-+ interpretation
+For each pain level (1-10), the average STAI (trait anxiety) was plotted, with the error bars. A positive trend is visible, which suggests that lower pain is associated with lower anxiety, while as pain increases, anxiety also increases. 
 
 #### 3.2. Pain ~ pain_cat 
 ```{r}
+pain_cat_data <- a_raw_data %>%
+  group_by(pain) %>%
+  summarise(mean_pain_cat = mean(pain_cat),
+            se = sd(pain_cat)/sqrt(n()))
 
+ ggplot(pain_cat_data, aes(x = pain, y = mean_pain_cat)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean_pain_cat - se,
+                    ymax = mean_pain_cat + se))
 ```
-
+The plot visualizes mean pain catastrophizing for each pain level, with error bars. As pain increases, mean pain catastrophizing also increases, which shows a clean positive relationship. Some variablity is present at certain pain levels - this might reflect differences in sample size across categories. 
 
 #### 3.3. Pain ~ mindfulness 
-#### 3.4. Pain ~ cortisol_serum
-#### 3.5. Pain ~ cortisol_saliva 
+```{r}
+mindfulness_data <- a_raw_data %>%
+  group_by(pain) %>%
+  summarise(mean_mindfulness = mean(mindfulness),
+            se = sd(mindfulness)/sqrt(n()))
+
+ ggplot(mindfulness_data, aes(x = pain, y = mean_mindfulness)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean_mindfulness - se,
+                    ymax = mean_mindfulness + se))
+```
+
+#### 3.4. Pain ~ cortisol_serum & Pain ~ cortisol_saliva
+```{r}
+cortisol_long_data <- a_raw_data %>%
+  select(pain, cortisol_serum, cortisol_saliva) %>%
+  pivot_longer(
+    cols = -pain,
+    names_to = "variable",
+    values_to = "value"
+  )
+
+cortisol_summary_data <- cortisol_long_data %>%
+  group_by(variable, pain) %>%
+  summarise(
+    mean_value = mean(value, na.rm = TRUE),
+    se = sd(value, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(cortisol_summary_data, aes(x = pain, y = mean_value)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = mean_value - se,
+                    ymax = mean_value + se),
+                width = 0.2) +
+  facet_wrap(~ variable, scales = "free_y") +
+  labs(
+    title = "Cortisol level across pain levels",
+    x = "Pain",
+    y = "Mean value"
+  )
+```
+In both panels, a clear positive trend is observed: higher pain levels are associated with higher average cortisol levels. 
+
+### 4. Relationships among predictors
+Predictors are the following: 
+* `STAI_trait`
+* `pain_cat`
+* `mindfulness`
+* `cortisol_serum`
+* `cortisol_saliva`
+* `age`
+* `weight`
+
+In order to investigate the relationships between the predictors, a correlation matrix was created. 
+```{r}
+cor_data <- a_raw_data %>% 
+  select(STAI_trait, pain_cat, mindfulness,
+         cortisol_serum, cortisol_saliva,
+         age, weight)
+
+cor_matrix <- cor(cor_data, use = "complete.obs")
+
+cor_matrix
+```
+
+Visualization: 
+```{r}
+corrplot(cor_matrix, method = "color", type = "upper")
+```
+Pbsychological predictors showed moderate levels of correlation: trait anxiety and pain catastrophizing correlated positively (r = 0.5047), mindfulness and pain catastrophizing correlated negatively (-0.5666), which indicates that lower levels of mindfulness is linked to higher levels of pain catastrophizing. Conversely, associations between psychological biological preditors were generally weak.
 
 
+### 5. Differences between hospital sites
+In order to assess the potential differences between the hospital sites with regards to the outcome variable (pain), the pain levels were examined across the hospital sites. 
+```{r}
+ggplot(a_raw_data, aes(x = hospital, y = pain)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-
-## Relationships among predictors
-
-## Do sites differ? - Clustering structure
+```
+Based on the boxplot, a small level of variation between hospital sites can be observed; however, the differences appear to be relatively moderate. 
 
 Before modeling, search answers for: 
 - should I transform (log)?
@@ -261,6 +345,90 @@ Before modeling, search answers for:
 If you find values in the dataset during the EDA, that are not correct based on the provided descriptions of the variables of the dataset please correct them here.
 
 ```{r}
-
+a_raw_data <- a_raw_data %>%
+  mutate(sex = recode(sex, "Male" = "male"),
+         hospital = as.factor(hospital))
 ```
 
+## =============================================================
+## Linear Mixed Model on Dataset A
+A linear mixed model was fitted with postoperatice pain as the outcome, and age, sex, trait anxiety (STAI), pain catastrophizing were added as fixed effect predictors. A random intercept model was fitted, including hospital-ID, in order to account for the slight fluctuation of pain levels across hospital sites.
+```{r}
+model_A <- lmer(
+  pain ~ age + sex + STAI_trait + pain_cat + mindfulness + cortisol_serum +
+    (1 | hospital),
+  data = a_raw_data
+)
+```
+
+1. Fixed effects results
+Extracting the coefficients and the CIs: 
+```{r}
+summary(model_A)
+confint(model_A, method = "Wald")
+```
+Among the predictors, serum cortisol showed a strong positive relationship with pain (β = 0.61, 95% CI [0.39, 0.83], p < .001), which indicates that higher cortisol levels are associated with higher pain levels. Mindfulness negatively correlated with postoperative pain (β = -0.26, 95% CI [-0.46, -0.07], p = .001), suggesting that lower pain can be linked to higher mindfulness. Age showed a considerably small, but significant correlation with postoperative pain (β = -0.05, 95% CI [-0.09, -0.02], p = .007).
+
+Conversely, sex (β = 0.30, 95% CI [-0.08, 0.67], p = .120), trait anxiety (β = 0.001, 95% CI [-0.045, 0.048], p = .952), and pain catastrophizing (β = 0.04, 95% CI [-0.02, 0.09], p = .199) are not significantly associated with pain. 
+
+The variance of the random intercept of hospital (σ² = 0.31) was smaller than the residual variance, indicating that majority of the variability in pain occured at the individual-level. 
+
+```{r}
+tidy_model <- broom.mixed::tidy(model_A, effects = "fixed", conf.int = TRUE)
+
+library(knitr)
+tidy_model %>%
+  mutate(
+    estimate = round(estimate, 2),
+    conf.low = round(conf.low, 2),
+    conf.high = round(conf.high, 2),
+    p.value = round(p.value, 3)
+  ) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  rename(
+    Predictor = term,
+    Beta = estimate,
+    `CI Lower` = conf.low,
+    `CI Upper` = conf.high,
+    `p-value` = p.value
+  ) %>%
+  knitr::kable(caption = "Fixed effects of the linear mixed-effects model")
+```
+The fixed effect estimates of the model are presented in the table, including the Beta values, the 95% confidence intervals, and the p values. 
+
+Variance components: 
+```{r}
+VarCorr(model_A)
+```
+The standard deviation of the random intercept was 0.56, and the residual standard deviation was 1.22.
+
+Marginal and Conditional R squared
+```{r}
+r2_values <- performance::r2(model_A)
+r2_values
+```
+The marginal R squared indicated that 31.7% of the variance was explained by the fixed effect predictors. 
+The conditional R was higher (43.6%), suggesting that the random intercept structure improved the model (this model explains the variance in a stronger manner).
+
+## =============================================================
+## DATASET B
+Importing the data: 
+```{r}
+b_raw_data <- haven::read_spss("../data/assignment_4_dataset_B.sav")
+```
+
+Generating predictions: 
+```{r}
+predict_b <- predict(model_A, newdata = b_raw_data, re.form = NA)
+```
+In order to evaluate the generalizability of the model used on dataset A, predictions were generated for dataset B, using the fixed effects estimated from dataset A. 
+
+Computing R squared:
+```{r}
+RSS <- sum((b_raw_data$pain - predict_b)^2)
+TSS <- sum((b_raw_data$pain - mean(b_raw_data$pain))^2)
+R2_B <- 1 - (RSS / TSS)
+R2_B
+```
+Based on the calculations (using the formula R2 = 1 − (TSS/RSS)), the R squared value is 0.35, indicating that this model explained approximately 35% of the variance in pain in dataset B. 
+The R squared value is lower than in dataset A (the conditional R squared was 0.436), suggesting that the model's predictive performance decreased when applied to new data. 

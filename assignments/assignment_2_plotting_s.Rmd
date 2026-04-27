@@ -1,6 +1,6 @@
 ---
 title: 'Assignment 2: Data visualization'
-author: "Tamas Nagy"
+author: "Boglarka Ludmany"
 output: html_document
 editor_options: 
   chunk_output_type: console
